@@ -1,0 +1,83 @@
+```yaml
+name: Build AniVerse Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Check project files
+        run: |
+          test -f package.json || (echo "package.json is missing" && exit 1)
+          test -f index.html || (echo "index.html is missing" && exit 1)
+          test -f src/main.tsx || (echo "src/main.tsx is missing" && exit 1)
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build web app
+        run: npm run build
+
+      - name: Add Android platform
+        run: npx cap add android
+
+      - name: Sync Android project
+        run: npx cap sync android
+
+      - name: Build debug APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Prepare APK
+        run: |
+          mkdir -p release-apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk release-apk/AniVerse.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AniVerse-APK
+          path: release-apk/AniVerse.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish APK to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: aniverse-build-${{ github.run_number }}-${{ github.run_attempt }}
+          name: AniVerse Android Build ${{ github.run_number }}
+          body: |
+            AniVerse Android APK for testing.
+            Download AniVerse.apk from Assets.
+          files: release-apk/AniVerse.apk
+          make_latest: true
+```
