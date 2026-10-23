@@ -1,3 +1,4 @@
+```yaml
 name: Build AniVerse Android APK
 
 on:
@@ -5,14 +6,13 @@ on:
   push:
     branches:
       - main
-      - master
 
 permissions:
   contents: write
 
 jobs:
   build:
-    name: Build Android APK
+    name: Build and Release APK
     runs-on: ubuntu-latest
 
     steps:
@@ -23,7 +23,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -36,15 +35,9 @@ jobs:
 
       - name: Check project files
         run: |
-          if [ ! -f package.json ]; then
-            echo "ERROR: package.json is missing."
-            exit 1
-          fi
-
-          if [ ! -f index.html ]; then
-            echo "ERROR: index.html is missing."
-            exit 1
-          fi
+          test -f package.json || { echo "ERROR: package.json missing"; exit 1; }
+          test -f index.html || { echo "ERROR: index.html missing"; exit 1; }
+          test -f capacitor.config.ts || { echo "ERROR: capacitor.config.ts missing"; exit 1; }
 
       - name: Install dependencies
         run: npm install
@@ -52,24 +45,13 @@ jobs:
       - name: Install Capacitor
         run: npm install @capacitor/core @capacitor/cli @capacitor/android
 
-      - name: Build web app
+      - name: Build web application
         run: npm run build
 
-      - name: Create Capacitor configuration
-        run: |
-          if [ ! -f capacitor.config.ts ] && \
-             [ ! -f capacitor.config.json ] && \
-             [ ! -f capacitor.config.js ]; then
-            cat > capacitor.config.json <<'EOF'
-          {
-            "appId": "com.aniverse.app",
-            "appName": "AniVerse",
-            "webDir": "dist"
-          }
-          EOF
-          fi
+      - name: Check Capacitor configuration
+        run: npx cap config
 
-      - name: Add Android platform
+      - name: Create Android platform if needed
         run: |
           if [ ! -d android ]; then
             npx cap add android
@@ -87,8 +69,7 @@ jobs:
       - name: Prepare APK
         run: |
           mkdir -p release-apk
-          cp android/app/build/outputs/apk/debug/app-debug.apk \
-             release-apk/AniVerse.apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk release-apk/AniVerse.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -101,12 +82,22 @@ jobs:
       - name: Publish APK to GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: aniverse-build-${{ github.run_number }}-${{ github.run_attempt }}
-          name: AniVerse Android Build ${{ github.run_number }}
+          tag_name: aniverse-build-${{ github.run_id }}-${{ github.run_attempt }}
+          name: AniVerse Android APK Build ${{ github.run_number }}
           body: |
-            AniVerse Android APK.
-
+            AniVerse Android APK for testing.
             Download AniVerse.apk from the Assets section.
-            This is a debug APK intended for testing and manual installation.
           files: release-apk/AniVerse.apk
           make_latest: true
+
+### Do these steps carefully
+
+1. Open `.github/workflows/build2.yml`.
+2. Click **Edit** and replace all existing code with the code above.
+3. Ensure the first line is `name: Build AniVerse Android APK`—**do not include the Markdown backticks**.
+4. Click **Commit changes**.
+5. Open **Actions → Build AniVerse Android APK → Run workflow**.
+
+**Important:** Your repository must contain the complete application source code and a valid `capacitor.config.ts`. This workflow removes the missing lock-file error, but other project configuration issues can still cause a build failure.
+
+When the build succeeds, download `AniVerse.apk` from **Releases → Assets**. This is a debug APK for testing, not a Play Store release.
